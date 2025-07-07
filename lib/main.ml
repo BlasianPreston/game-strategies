@@ -30,8 +30,22 @@ let non_win =
     ]
 
 let print_game (game : Game.t) =
-  ignore game;
-  print_endline ""
+  let board = game.board in
+  let board_width = Game_kind.board_length game.game_kind in
+  let board_lst =
+    List.init board_width ~f:(fun row_idx ->
+        List.init board_width ~f:(fun col_idx ->
+            match Map.find board { row = row_idx; column = col_idx } with
+            | Some piece ->
+                if col_idx = board_width - 1 then Piece.to_string piece
+                else Piece.to_string piece ^ " | "
+            | None -> if col_idx = board_width - 1 then " " else "  | "))
+  in
+  List.iteri board_lst ~f:(fun row_idx lst ->
+      if not (row_idx = board_width - 1) then (
+        print_endline (String.concat ~sep:"" lst);
+        print_endline (String.make ((board_width * 4) - 3) '-'))
+      else print_endline (String.concat ~sep:"" lst))
 
 let%expect_test "print_win_for_x" =
   print_game win_for_x;
