@@ -29,6 +29,8 @@ let non_win =
       ({ row = 2; column = 0 }, O);
     ]
 
+
+
 let print_game (game : Game.t) =
   let board = game.board in
   let board_width = Game_kind.board_length game.game_kind in
@@ -94,46 +96,84 @@ let%expect_test "print_available moves" =
   return ()
 
 let all_positions (game : Game.t) =
-  let row = (List.init (game.game_kind |> Game_kind.board_length) ~f:Fn.id) in
-  let cartesian_prod = List.cartesian_product row row in 
-  List.map cartesian_prod ~f:(fun (x, y) -> {Position.row = x; Position.column = y})
+  let row = List.init (game.game_kind |> Game_kind.board_length) ~f:Fn.id in
+  let cartesian_prod = List.cartesian_product row row in
+  List.map cartesian_prod ~f:(fun (x, y) ->
+      { Position.row = x; Position.column = y })
 
 (* Exercise 2 *)
 let evaluate (game : Game.t) : Evaluation.t =
   let board = game.board in
   let board_win_length = Game_kind.win_length game.game_kind in
   let rec check_position target depth direction position =
-    match (depth >= board_win_length, Map.find board position) with 
-    |true, _ -> true
+    match (depth >= board_win_length, Map.find board position) with
+    | true, _ -> true
     | false, None -> false
-    | false, Some piece ->
-      match (Piece.equal piece target) with
-      false -> false
-      | true -> (check_position target (depth + 1) direction (direction position)) in
+    | false, Some piece -> (
+        match Piece.equal piece target with
+        | false -> false
+        | true ->
+            check_position target (depth + 1) direction (direction position))
+  in
   let all_positions = all_positions game in
-  match List.fold ~init:None all_positions ~f:(fun winner position ->
-    match winner, Map.find board position with
-    | Some _, _ -> winner
-    | None, None -> None
-    | None, Some piece -> let possible_win = List.exists (Position.all_offsets) ~f:(fun direction -> check_position piece 0 direction position) in
-    if possible_win then winner else None) with
-    Some winner -> Game_over {winner}
-    | None -> Game_continues
+  match
+    List.fold ~init:None all_positions ~f:(fun winner position ->
+        match (winner, Map.find board position) with
+        | Some _, _ -> winner
+        | None, None -> None
+        | None, Some piece ->
+            let possible_win =
+              List.exists Position.no_redundant_offsets ~f:(fun direction ->
+                  check_position piece 0 direction position)
+            in
+            if possible_win then Some piece else None)
+  with
+  | Some winner -> Game_over { winner=Some winner }
+  | None -> let available_moves = available_moves game in
+  if List.is_empty available_moves then Illegal_move else Game_continues
 
 let%expect_test "evalute_non_win" =
   print_s (Evaluation.sexp_of_t (evaluate non_win));
-  [%expect
-    {|
+  [%expect {|
       Game_continues
       |}];
   return ()
 
+let%expect_test "evalute_non_win" =
+let test_win = Game.set_piece non_win {Position.row = 1; column = 1} (Piece.of_string "X") in
+  print_s (Evaluation.sexp_of_t (evaluate test_win));
+  [%expect {|
+      (Game_over (winner (X)))
+      |}];
+  return ()
+
+let%expect_test "evalute_win" =
+  print_s (Evaluation.sexp_of_t (evaluate win_for_x));
+  [%expect {|
+      (Game_over (winner (X)))
+      |}];
+  return ()
 
 (* Exercise 3 *)
 let winning_moves ~(me : Piece.t) (game : Game.t) : Position.t list =
-  ignore me;
-  ignore game;
-  failwith "Implement me!"
+  let available_moves = available_moves game in
+  List.map available_moves ~f:(fun move ->
+      match evaluate (Game.set_piece game move me) with
+      | Game_over { winner } -> (
+          match winner with
+          | Some winner -> if Piece.equal winner me then Some move else None
+          | None -> None)
+      | _ -> None)
+  |> List.filter_opt
+
+let%expect_test "evalute_winning_moves" =
+  print_s
+    (sexp_of_list Position.sexp_of_t
+       (winning_moves ~me:(Piece.of_string "X") non_win));
+  [%expect {|
+      (((row 1) (column 1)))
+      |}];
+  return ()
 
 (* Exercise 4 *)
 let losing_moves ~(me : Piece.t) (game : Game.t) : Position.t list =
