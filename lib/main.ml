@@ -93,10 +93,41 @@ let%expect_test "print_available moves" =
      ((row 1) (column 2)) ((row 2) (column 1)))|}];
   return ()
 
+let all_positions (game : Game.t) =
+  let row = (List.init (game.game_kind |> Game_kind.board_length) ~f:Fn.id) in
+  let cartesian_prod = List.cartesian_product row row in 
+  List.map cartesian_prod ~f:(fun (x, y) -> {Position.row = x; Position.column = y})
+
 (* Exercise 2 *)
 let evaluate (game : Game.t) : Evaluation.t =
-  ignore game;
-  failwith "Implement me!"
+  let board = game.board in
+  let board_win_length = Game_kind.win_length game.game_kind in
+  let rec check_position target depth direction position =
+    match (depth >= board_win_length, Map.find board position) with 
+    |true, _ -> true
+    | false, None -> false
+    | false, Some piece ->
+      match (Piece.equal piece target) with
+      false -> false
+      | true -> (check_position target (depth + 1) direction (direction position)) in
+  let all_positions = all_positions game in
+  match List.fold ~init:None all_positions ~f:(fun winner position ->
+    match winner, Map.find board position with
+    | Some _, _ -> winner
+    | None, None -> None
+    | None, Some piece -> let possible_win = List.exists (Position.all_offsets) ~f:(fun direction -> check_position piece 0 direction position) in
+    if possible_win then winner else None) with
+    Some winner -> Game_over {winner}
+    | None -> Game_continues
+
+let%expect_test "evalute_non_win" =
+  print_s (Evaluation.sexp_of_t (evaluate non_win));
+  [%expect
+    {|
+      Game_continues
+      |}];
+  return ()
+
 
 (* Exercise 3 *)
 let winning_moves ~(me : Piece.t) (game : Game.t) : Position.t list =
