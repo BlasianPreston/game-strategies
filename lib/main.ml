@@ -177,10 +177,11 @@ let%expect_test "evalute_winning_moves" =
 
 (* Exercise 4 *)
 let losing_moves ~(me : Piece.t) (game : Game.t) : Position.t list =
-  ignore me;
-  ignore game;
-  failwith "Implement me!"
-  (* If *)
+  let opponent_winning_moves = winning_moves ~me:(Piece.flip me) game in
+  let available_moves = available_moves game in
+  match List.length opponent_winning_moves >= 2 with
+    true -> available_moves
+    | false -> List.filter available_moves ~f:(fun move -> not (List.mem opponent_winning_moves move ~equal:(Position.equal)))
 
 let exercise_one =
   Command.async ~summary:"Exercise 1: Where can I move?"
