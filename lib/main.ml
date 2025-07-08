@@ -73,8 +73,25 @@ let%expect_test "print_non_win" =
 
 (* Exercise 1 *)
 let available_moves (game : Game.t) : Position.t list =
-  ignore game;
-  failwith "Implement me!"
+  let board = game.board in
+  let board_width = Game_kind.board_length game.game_kind in
+  let board_lst =
+    List.init board_width ~f:(fun row_idx ->
+        List.init board_width ~f:(fun col_idx ->
+            match Map.find board { row = row_idx; column = col_idx } with
+            | Some _ -> None
+            | None -> Some { Position.row = row_idx; column = col_idx }))
+  in
+  let filtered_lst = List.map board_lst ~f:(fun row -> List.filter_opt row) in
+  List.concat filtered_lst
+
+let%expect_test "print_available moves" =
+  print_s (sexp_of_list Position.sexp_of_t (available_moves non_win));
+  [%expect
+    {|
+    (((row 0) (column 1)) ((row 0) (column 2)) ((row 1) (column 1))
+     ((row 1) (column 2)) ((row 2) (column 1)))|}];
+  return ()
 
 (* Exercise 2 *)
 let evaluate (game : Game.t) : Evaluation.t =
