@@ -130,7 +130,7 @@ let evaluate (game : Game.t) : Evaluation.t =
   with
   | Some winner -> Game_over { winner=Some winner }
   | None -> let available_moves = available_moves game in
-  if List.is_empty available_moves then Illegal_move else Game_continues
+  if List.is_empty available_moves then Game_over {winner=None} else Game_continues
 
 let%expect_test "evalute_non_win" =
   print_s (Evaluation.sexp_of_t (evaluate non_win));
@@ -180,6 +180,7 @@ let losing_moves ~(me : Piece.t) (game : Game.t) : Position.t list =
   ignore me;
   ignore game;
   failwith "Implement me!"
+  (* If *)
 
 let exercise_one =
   Command.async ~summary:"Exercise 1: Where can I move?"
