@@ -236,8 +236,14 @@ let command =
       ("four", exercise_four);
     ]
 
+let non_losing_moves available_moves losing_moves =
+  List.filter available_moves ~f:(fun move -> List.mem losing_moves move ~equal:Position.equal)
+
 (* Exercise 5 *)
 let make_move ~(game : Game.t) ~(you_play : Piece.t) : Position.t =
-  ignore game;
-  ignore you_play;
-  failwith "Implement me!"
+  let available_moves = available_moves game in
+  let win_moves = winning_moves ~me:you_play game in
+  let opponent_winning_moves = winning_moves ~me:(Piece.flip you_play) game in
+  let losing_moves = losing_moves ~me:you_play game in
+  if (not (List.is_empty (win_moves))) then 
+    (List.random_element_exn win_moves) else if not (List.is_empty opponent_winning_moves) then List.random_element_exn opponent_winning_moves else List.random_element_exn (non_losing_moves available_moves losing_moves)
