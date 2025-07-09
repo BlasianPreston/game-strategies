@@ -29,8 +29,6 @@ let non_win =
       ({ row = 2; column = 0 }, O);
     ]
 
-
-
 let print_game (game : Game.t) =
   let board = game.board in
   let board_width = Game_kind.board_length game.game_kind in
@@ -128,9 +126,11 @@ let evaluate (game : Game.t) : Evaluation.t =
             in
             if possible_win then Some piece else None)
   with
-  | Some winner -> Game_over { winner=Some winner }
-  | None -> let available_moves = available_moves game in
-  if List.is_empty available_moves then Game_over {winner=None} else Game_continues
+  | Some winner -> Game_over { winner = Some winner }
+  | None ->
+      let available_moves = available_moves game in
+      if List.is_empty available_moves then Game_over { winner = None }
+      else Game_continues
 
 let%expect_test "evalute_non_win" =
   print_s (Evaluation.sexp_of_t (evaluate non_win));
@@ -140,7 +140,11 @@ let%expect_test "evalute_non_win" =
   return ()
 
 let%expect_test "evalute_non_win" =
-let test_win = Game.set_piece non_win {Position.row = 1; column = 1} (Piece.of_string "X") in
+  let test_win =
+    Game.set_piece non_win
+      { Position.row = 1; column = 1 }
+      (Piece.of_string "X")
+  in
   print_s (Evaluation.sexp_of_t (evaluate test_win));
   [%expect {|
       (Game_over (winner (X)))
@@ -180,14 +184,17 @@ let losing_moves ~(me : Piece.t) (game : Game.t) : Position.t list =
   let opponent_winning_moves = winning_moves ~me:(Piece.flip me) game in
   let available_moves = available_moves game in
   match List.length opponent_winning_moves >= 2 with
-    true -> available_moves
-    | false -> List.filter available_moves ~f:(fun move -> not (List.mem opponent_winning_moves move ~equal:(Position.equal)))
+  | true -> available_moves
+  | false ->
+      List.filter available_moves ~f:(fun move ->
+          not (List.mem opponent_winning_moves move ~equal:Position.equal))
 
 let%expect_test "evalute_losing_moves" =
   print_s
     (sexp_of_list Position.sexp_of_t
        (losing_moves ~me:(Piece.of_string "O") non_win));
-  [%expect {|
+  [%expect
+    {|
     (((row 0) (column 1)) ((row 0) (column 2)) ((row 1) (column 2)) 
      ((row 2) (column 1)))|}];
   return ()
@@ -248,20 +255,60 @@ let command =
 let available_moves_that_do_not_immediately_lose game ~me =
   let available_moves = available_moves game in
   let losing_moves = losing_moves ~me game in
-  List.filter available_moves ~f:(fun move -> not (List.mem losing_moves move ~equal:Position.equal))
+  List.filter available_moves ~f:(fun move ->
+      not (List.mem losing_moves move ~equal:Position.equal))
 
 let%expect_test "evalute_moves_that_do_not_immediately_lose" =
   print_s
     (sexp_of_list Position.sexp_of_t
-       (available_moves_that_do_not_immediately_lose ~me:(Piece.of_string "O") non_win));
+       (available_moves_that_do_not_immediately_lose ~me:(Piece.of_string "O")
+          non_win));
   [%expect {|
     (((row 1) (column 1)))
     |}];
   return ()
 
 (* Exercise 5 *)
-let make_move ~(game : Game.t) ~(you_play : Piece.t) : Position.t =
+let _make_move ~(game : Game.t) ~(you_play : Piece.t) : Position.t =
   let win_moves = winning_moves ~me:you_play game in
   let opponent_winning_moves = winning_moves ~me:(Piece.flip you_play) game in
-  if (not (List.is_empty (win_moves))) then 
-    (List.hd_exn win_moves) else if not (List.is_empty opponent_winning_moves) then List.hd_exn opponent_winning_moves else List.hd_exn (available_moves_that_do_not_immediately_lose game ~me:you_play)
+  if not (List.is_empty win_moves) then List.hd_exn win_moves
+  else if not (List.is_empty opponent_winning_moves) then
+    List.hd_exn opponent_winning_moves
+  else
+    List.hd_exn (available_moves_that_do_not_immediately_lose game ~me:you_play)
+
+let get_score game me =
+  match evaluate game with
+  | Game_over { winner } -> (
+      match winner with
+      | Some winner -> if Piece.equal winner me then 9999999999 else -999999999
+      | None -> 0)
+  | _ -> 0
+
+let rec minimax game depth maximizing_player me =
+  match evaluate game with
+  | Game_over { winner } -> (
+      match winner with
+      | Some _ -> if maximizing_player then 999999999999 else -999999999999
+      | None -> get_score game me)
+  | _ ->
+      if depth = 0 then get_score game me
+      else if maximizing_player then
+        List.fold (available_moves game) ~init:0 ~f:(fun value move ->
+            let new_game = Game.set_piece game move me in
+            Int.max value (minimax new_game (depth - 1) false me))
+      else
+        List.fold (available_moves game) ~init:0 ~f:(fun value move ->
+            let new_game = Game.set_piece game move me in
+            Int.min value (minimax new_game (depth - 1) true me))
+
+let make_move ~game ~you_play =
+  let available_moves = available_moves game in
+  let score_move_pairing = List.fold available_moves ~init:(-9999999999999, {Position.row = 0; column = 0}) ~f:(fun acc move ->
+    let new_game = (Game.set_piece game move you_play) in
+    let move_and_score = (minimax new_game 3 true you_play, move) in
+    match acc, move_and_score with
+    ((old_score, old_move), (new_score, new_move)) -> if new_score > old_score then (new_score, new_move) else (old_score, old_move))  in
+  match score_move_pairing with 
+  | (_, move) -> move
