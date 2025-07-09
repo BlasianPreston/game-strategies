@@ -183,6 +183,15 @@ let losing_moves ~(me : Piece.t) (game : Game.t) : Position.t list =
     true -> available_moves
     | false -> List.filter available_moves ~f:(fun move -> not (List.mem opponent_winning_moves move ~equal:(Position.equal)))
 
+let%expect_test "evalute_losing_moves" =
+  print_s
+    (sexp_of_list Position.sexp_of_t
+       (losing_moves ~me:(Piece.of_string "O") non_win));
+  [%expect {|
+    (((row 0) (column 1)) ((row 0) (column 2)) ((row 1) (column 2)) 
+     ((row 2) (column 1)))|}];
+  return ()
+
 let exercise_one =
   Command.async ~summary:"Exercise 1: Where can I move?"
     (let%map_open.Command () = return () in
@@ -236,14 +245,23 @@ let command =
       ("four", exercise_four);
     ]
 
-let non_losing_moves available_moves losing_moves =
-  List.filter available_moves ~f:(fun move -> List.mem losing_moves move ~equal:Position.equal)
+let available_moves_that_do_not_immediately_lose game ~me =
+  let available_moves = available_moves game in
+  let losing_moves = losing_moves ~me game in
+  List.filter available_moves ~f:(fun move -> not (List.mem losing_moves move ~equal:Position.equal))
+
+let%expect_test "evalute_moves_that_do_not_immediately_lose" =
+  print_s
+    (sexp_of_list Position.sexp_of_t
+       (available_moves_that_do_not_immediately_lose ~me:(Piece.of_string "O") non_win));
+  [%expect {|
+    (((row 1) (column 1)))
+    |}];
+  return ()
 
 (* Exercise 5 *)
 let make_move ~(game : Game.t) ~(you_play : Piece.t) : Position.t =
-  let available_moves = available_moves game in
   let win_moves = winning_moves ~me:you_play game in
   let opponent_winning_moves = winning_moves ~me:(Piece.flip you_play) game in
-  let losing_moves = losing_moves ~me:you_play game in
   if (not (List.is_empty (win_moves))) then 
-    (List.random_element_exn win_moves) else if not (List.is_empty opponent_winning_moves) then List.random_element_exn opponent_winning_moves else List.random_element_exn (non_losing_moves available_moves losing_moves)
+    (List.hd_exn win_moves) else if not (List.is_empty opponent_winning_moves) then List.hd_exn opponent_winning_moves else List.hd_exn (available_moves_that_do_not_immediately_lose game ~me:you_play)
