@@ -284,6 +284,38 @@ let _make_move ~(game : Game.t) ~(you_play : Piece.t) : Position.t =
     | Some move -> move
     | None -> List.random_element_exn (available_moves game)
 
+let check_surroundings (game : Game.t) me =
+  let board = game.board in
+  let board_width = Game_kind.board_length game.game_kind in
+  let board_lst =
+    List.init board_width ~f:(fun row_idx ->
+        List.init board_width ~f:(fun col_idx ->
+            let position = { Position.row = row_idx; column = col_idx } in
+            match Map.find board position with
+            | Some piece -> (position, Some piece)
+            | None -> (position, None)))
+  in
+  List.concat board_lst
+  |> List.fold ~init:0. ~f:(fun acc (position, piece) ->
+         match piece with
+         | Some p ->
+             if Piece.equal me p then
+               let surroundings =
+                 List.map Position.surrounding_positions ~f:(fun direction ->
+                     direction position)
+                 |> List.filter ~f:(fun position ->
+                        not
+                          (Position.in_bounds position ~game_kind:game.game_kind))
+               in
+               acc
+               +. List.fold surroundings ~init:0. ~f:(fun acc surround_pos ->
+                      match Map.find game.board surround_pos with
+                      | Some piece ->
+                          if Piece.equal piece me then acc +. 5. else acc -. 5.
+                      | None -> acc)
+             else acc
+         | None -> acc)
+
 let calculate_sum_of_distances_from_game (game : Game.t) me =
   let board = game.board in
   let board_width = Game_kind.board_length game.game_kind in
@@ -300,7 +332,9 @@ let calculate_sum_of_distances_from_game (game : Game.t) me =
          match piece with
          | Some p ->
              if Piece.equal me p then
-               acc +. Position.distance_from_center position game.game_kind
+               acc
+               +. Position.distance_from_center position game.game_kind
+               +. check_surroundings game me
              else acc
          | None -> acc)
 

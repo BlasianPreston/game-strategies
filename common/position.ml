@@ -36,3 +36,15 @@ let distance_from_center t game_kind =
     Int.pow (center - t.row) 2 + Int.pow (center - t.column) 2
   in
   Float.sqrt (Float.of_int distance_from_center_not_square_rooted)
+
+let surrounding_positions =
+  let ( >> ) = Fn.compose in
+  [
+    right;
+    right >> right;
+    right >> down >> right >> down;
+    right >> down;
+    down;
+    down >> down;
+    down >> left >> down >> left;
+  ]
