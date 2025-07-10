@@ -25,8 +25,14 @@ let all_offsets =
     up; up >> right; right; right >> down; down; down >> left; left; left >> up;
   ]
 
-  let no_redundant_offsets =
+let no_redundant_offsets =
   let ( >> ) = Fn.compose in
-  [
-    right; right >> down; down; down >> left;
-  ]
+  [ right; right >> down; down; down >> left ]
+
+let distance_from_center t game_kind =
+  let board_length = Game_kind.board_length game_kind in
+  let center = board_length / 2 in
+  let distance_from_center_not_square_rooted =
+    Int.pow (center - t.row) 2 + Int.pow (center - t.column) 2
+  in
+  Float.sqrt (Float.of_int distance_from_center_not_square_rooted)

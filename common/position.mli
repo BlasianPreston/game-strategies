@@ -28,3 +28,5 @@ val all_offsets : (t -> t) list
     (i.e. left, up-left, up, up-right, right, right-down, down, down-left). *)
 
 val no_redundant_offsets : (t -> t) list
+
+val distance_from_center : t -> Game_kind.t -> float
