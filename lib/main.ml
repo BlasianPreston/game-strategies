@@ -76,11 +76,12 @@ let available_moves (game : Game.t) : Position.t list =
   let board = game.board in
   let board_width = Game_kind.board_length game.game_kind in
   let board_lst =
-    List.init board_width ~f:(fun row_idx ->
-        List.init board_width ~f:(fun col_idx ->
-            match Map.find board { row = row_idx; column = col_idx } with
+    List.init board_width ~f:(fun row ->
+        List.init board_width ~f:(fun column ->
+          let position = { Position.row; column } in
+            match Map.find board position with
             | Some _ -> None
-            | None -> Some { Position.row = row_idx; column = col_idx }))
+            | None -> Some position))
   in
   let filtered_lst = List.map board_lst ~f:(fun row -> List.filter_opt row) in
   List.concat filtered_lst
@@ -115,7 +116,7 @@ let evaluate (game : Game.t) : Evaluation.t =
   in
   let all_positions = all_positions game in
   match
-    List.fold ~init:None all_positions ~f:(fun winner position ->
+    List.fold ~init:None all_positions ~f:(fun winner position -> (* Change to find_map *)
         match (winner, Map.find board position) with
         | Some _, _ -> winner
         | None, None -> None
@@ -276,7 +277,11 @@ let _make_move ~(game : Game.t) ~(you_play : Piece.t) : Position.t =
   else if not (List.is_empty opponent_winning_moves) then
     List.hd_exn opponent_winning_moves
   else
-    List.hd_exn (available_moves_that_do_not_immediately_lose game ~me:you_play)
+    match
+      List.hd (available_moves_that_do_not_immediately_lose game ~me:you_play)
+    with
+    | Some move -> move
+    | None -> List.random_element_exn (available_moves game)
 
 let get_score game me =
   match evaluate game with
@@ -295,20 +300,25 @@ let rec minimax game depth maximizing_player me =
   | _ ->
       if depth = 0 then get_score game me
       else if maximizing_player then
-        List.fold (available_moves game) ~init:0 ~f:(fun value move ->
+        List.fold (available_moves game) ~init:Int.min_value ~f:(fun value move -> (* Maybe modularized this code*)
             let new_game = Game.set_piece game move me in
             Int.max value (minimax new_game (depth - 1) false me))
       else
-        List.fold (available_moves game) ~init:0 ~f:(fun value move ->
-            let new_game = Game.set_piece game move me in
+        List.fold (available_moves game) ~init:Int.max_value ~f:(fun value move ->
+            let new_game = Game.set_piece game move (Piece.flip me) in
             Int.min value (minimax new_game (depth - 1) true me))
 
 let make_move ~game ~you_play =
   let available_moves = available_moves game in
-  let score_move_pairing = List.fold available_moves ~init:(-9999999999999, {Position.row = 0; column = 0}) ~f:(fun acc move ->
-    let new_game = (Game.set_piece game move you_play) in
-    let move_and_score = (minimax new_game 3 true you_play, move) in
-    match acc, move_and_score with
-    ((old_score, old_move), (new_score, new_move)) -> if new_score > old_score then (new_score, new_move) else (old_score, old_move))  in
-  match score_move_pairing with 
-  | (_, move) -> move
+  let score_move_pairing =
+    List.fold available_moves
+      ~init:(-9999999999999, { Position.row = 0; column = 0 })
+      ~f:(fun acc move ->
+        let new_game = Game.set_piece game move you_play in
+        let move_and_score = (minimax new_game 9 false you_play, move) in
+        match (acc, move_and_score) with
+        | (old_score, old_move), (new_score, new_move) ->
+            if new_score > old_score then (new_score, new_move)
+            else (old_score, old_move))
+  in
+  match score_move_pairing with _, move -> move
