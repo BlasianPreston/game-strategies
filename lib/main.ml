@@ -271,7 +271,7 @@ let%expect_test "evalute_moves_that_do_not_immediately_lose" =
   return ()
 
 (* Exercise 5 *)
-let _make_move ~(game : Game.t) ~(you_play : Piece.t) : Position.t =
+let _make_move_tictactoe ~(game : Game.t) ~(you_play : Piece.t) : Position.t =
   let win_moves = winning_moves ~me:you_play game in
   let opponent_winning_moves = winning_moves ~me:(Piece.flip you_play) game in
   if not (List.is_empty win_moves) then List.hd_exn win_moves
@@ -284,59 +284,41 @@ let _make_move ~(game : Game.t) ~(you_play : Piece.t) : Position.t =
     | Some move -> move
     | None -> List.random_element_exn (available_moves game)
 
-let check_surroundings (game : Game.t) me =
-  let board = game.board in
-  let board_width = Game_kind.board_length game.game_kind in
-  let board_lst =
-    List.init board_width ~f:(fun row_idx ->
-        List.init board_width ~f:(fun col_idx ->
-            let position = { Position.row = row_idx; column = col_idx } in
-            match Map.find board position with
-            | Some piece -> (position, Some piece)
-            | None -> (position, None)))
-  in
-  List.concat board_lst
-  |> List.fold ~init:0. ~f:(fun acc (position, piece) ->
-         match piece with
-         | Some p ->
-             if Piece.equal me p then
-               let surroundings =
-                 List.map Position.surrounding_positions ~f:(fun direction ->
-                     direction position)
-                 |> List.filter ~f:(fun position ->
-                        not
-                          (Position.in_bounds position ~game_kind:game.game_kind))
-               in
-               acc
-               +. List.fold surroundings ~init:0. ~f:(fun acc surround_pos ->
-                      match Map.find game.board surround_pos with
-                      | Some piece ->
-                          if Piece.equal piece me then acc +. 5. else acc -. 5.
-                      | None -> acc)
-             else acc
-         | None -> acc)
+let check_for_opponents board_lst (game : Game.t) me =
+  List.fold board_lst ~init:0. ~f:(fun acc (position, piece) ->
+      match piece with
+      | Some p ->
+          if Piece.equal (Piece.flip me) p then
+            let surroundings =
+              List.map Position.check_opp ~f:(fun direction ->
+                  direction position)
+              |> List.filter ~f:(fun position ->
+                     not (Position.in_bounds position ~game_kind:game.game_kind))
+            in
+            acc
+            +. List.fold surroundings ~init:0. ~f:(fun acc surround_pos ->
+                   match Map.find game.board surround_pos with
+                   | Some piece ->
+                       if Piece.equal piece (Piece.flip me) then acc +. 10.
+                       else acc
+                   | None -> acc)
+          else acc
+      | None -> acc)
 
-let calculate_sum_of_distances_from_game (game : Game.t) me =
+let all_surrounding_positions (game : Game.t) =
   let board = game.board in
-  let board_width = Game_kind.board_length game.game_kind in
-  let board_lst =
-    List.init board_width ~f:(fun row_idx ->
-        List.init board_width ~f:(fun col_idx ->
-            let position = { Position.row = row_idx; column = col_idx } in
-            match Map.find board position with
-            | Some piece -> (position, Some piece)
-            | None -> (position, None)))
-  in
-  List.concat board_lst
-  |> List.fold ~init:0. ~f:(fun acc (position, piece) ->
-         match piece with
-         | Some p ->
-             if Piece.equal me p then
-               acc
-               +. Position.distance_from_center position game.game_kind
-               +. check_surroundings game me
-             else acc
-         | None -> acc)
+  let closed_positions = Map.keys board in
+  List.concat_map closed_positions ~f:(fun pos ->
+      List.map Position.all_offsets ~f:(fun direction -> direction pos))
+
+let calculate_sum_of_distances_from_game board_lst (game : Game.t) me =
+  List.fold board_lst ~init:0. ~f:(fun acc (position, piece) ->
+      match piece with
+      | Some p ->
+          if Piece.equal me p then
+            acc +. (10. *. Position.distance_from_center position game.game_kind)
+          else acc
+      | None -> acc)
 
 let get_score game me =
   match evaluate game with
@@ -344,40 +326,72 @@ let get_score game me =
       match winner with
       | Some winner ->
           if Piece.equal winner me then Float.max_value else Float.min_value
-      | None -> -100.)
-  | _ -> 100. -. calculate_sum_of_distances_from_game game me
-
-let rec minimax game depth maximizing_player me =
-  match evaluate game with
-  | Game_over { winner } -> (
-      match winner with
-      | Some _ -> if maximizing_player then Float.max_value else Float.min_value
-      | None -> get_score game me)
+      | None -> 0.)
   | _ ->
-      if depth = 0 then get_score game me
-      else if maximizing_player then
-        List.fold (available_moves game) ~init:Float.min_value
-          ~f:(fun value move ->
-            (* Maybe modularize this code*)
-            let new_game = Game.set_piece game move me in
-            Float.max value (minimax new_game (depth - 1) false me))
-      else
-        List.fold (available_moves game) ~init:Float.max_value
-          ~f:(fun value move ->
-            let new_game = Game.set_piece game move (Piece.flip me) in
-            Float.min value (minimax new_game (depth - 1) true me))
+      let board = game.board in
+      let board_width = Game_kind.board_length game.game_kind in
+      let board_lst =
+        List.init board_width ~f:(fun row_idx ->
+            List.init board_width ~f:(fun col_idx ->
+                let position = { Position.row = row_idx; column = col_idx } in
+                match Map.find board position with
+                | Some piece -> (position, Some piece)
+                | None -> (position, None)))
+      in
+      let board_lst = List.concat board_lst in
+      0.
+      -. calculate_sum_of_distances_from_game board_lst game me
+      +. check_for_opponents board_lst game me
 
-let make_move ~game ~you_play =
-  let available_moves = available_moves game in
-  let score_move_pairing =
-    List.fold available_moves
-      ~init:(Float.min_value, { Position.row = 0; column = 0 })
-      ~f:(fun acc move ->
-        let new_game = Game.set_piece game move you_play in
-        let move_and_score = (minimax new_game 2 false you_play, move) in
-        match (acc, move_and_score) with
-        | (old_score, old_move), (new_score, new_move) ->
-            if Float.(new_score > old_score) then (new_score, new_move)
-            else (old_score, old_move))
-  in
-  match score_move_pairing with _, move -> move
+let rec minimax game depth maximizing_player me alpha beta =
+  if depth = 0 then get_score game me
+  else if maximizing_player then
+    let rec loop moves alpha =
+      match moves with
+      | [] -> alpha
+      | move :: rest ->
+          let score =
+            minimax
+              (Game.set_piece game move me)
+              (depth - 1) false me alpha beta
+          in
+          let alpha = Float.max alpha score in
+          if Float.(beta <= alpha) then alpha else loop rest alpha
+    in
+    loop (all_surrounding_positions game) alpha
+  else
+    let rec loop moves beta =
+      match moves with
+      | [] -> beta
+      | move :: rest ->
+          let score =
+            minimax
+              (Game.set_piece game move me)
+              (depth - 1) false me alpha beta
+          in
+          let beta = Float.min beta score in
+          if Float.(beta <= alpha) then beta else loop rest beta
+    in
+    loop (all_surrounding_positions game) beta
+
+let make_move ~(game : Game.t) ~you_play =
+  if Map.is_empty game.board then
+    let center = (Game_kind.board_length game.game_kind - 1) / 2 in
+    { Position.row = center; column = center }
+  else
+    let available_moves = available_moves game in
+    let score_move_pairing =
+      List.fold available_moves
+        ~init:(Float.min_value, { Position.row = 0; column = 0 })
+        ~f:(fun acc move ->
+          let new_game = Game.set_piece game move you_play in
+          let move_and_score =
+            ( minimax new_game 3 false you_play Float.min_value Float.max_value,
+              move )
+          in
+          match (acc, move_and_score) with
+          | (old_score, old_move), (new_score, new_move) ->
+              if Float.(new_score > old_score) then (new_score, new_move)
+              else (old_score, old_move))
+    in
+    match score_move_pairing with _, move -> move

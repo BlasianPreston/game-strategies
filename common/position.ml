@@ -48,3 +48,20 @@ let surrounding_positions =
     down >> down;
     down >> left >> down >> left;
   ]
+
+let check_opp =
+  let ( >> ) = Fn.compose in
+  [
+    right;
+    right >> right;
+    right >> right >> right;
+    right >> down;
+    right >> right >> down >> down;
+    right >> right >> right >> down >> down >> down;
+    down;
+    down >> down;
+    down >> down >> down;
+    down >> left;
+    down >> down >> left >> left;
+    down >> down >> down >> left >> left >> left;
+  ]
